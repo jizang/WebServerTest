@@ -1,5 +1,6 @@
 // 引入 Entity Framework Core 的核心功能命名空間。
 // EF Core 是一個 ORM (物件關聯對應) 框架，讓我們可以用 C# 物件來操作資料庫。
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 
 // 引入我們使用 EF Core Power Tools 從資料庫產生的 Model 和 DbContext 所在的命名空間。
@@ -49,6 +50,50 @@ public class Program
         //    註冊完成後，未來我們就可以在 Controller 的「建構函式」中
         //    直接要求傳入 WebServerDBContext，DI 容器就會自動幫我們建立並傳入。
 
+        // --- 3. 註冊 Session (工作階段) 服務 ---
+        // (a) 註冊一個「分散式記憶體快取」，Session 會使用它來在伺服器記憶體中儲存資料。
+        builder.Services.AddDistributedMemoryCache();
+
+        // (b) 註冊 Session 服務，並設定選項
+        builder.Services.AddSession(options =>
+        {
+            // 設定 Session 的閒置超時時間。如果 60 分鐘內沒有任何操作，Session 將會過期。
+            options.IdleTimeout = TimeSpan.FromMinutes(60);
+
+            // 設定 Session Cookie 只能由伺服器端 (Http) 存取，
+            // 避免被用戶端的 JavaScript 腳本 (例如 XSS 攻擊) 竊取。
+            options.Cookie.HttpOnly = true;
+
+            // 設定這個 Cookie 對於應用程式的運作至關重要。
+            options.Cookie.IsEssential = true;
+        });
+
+        // --- 4. 註冊 Authentication (驗證) 服務 ---
+        builder.Services
+            // (a) 設定預設的驗證方案 (Scheme) 為 "Cookies"。
+            // 當我們在 Controller 中使用 [Authorize] 時，
+            // 系統會自動使用 Cookie 驗證機制來檢查使用者是否登入。
+            .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+
+            // (b) 加入 Cookie 驗證的具體設定
+            .AddCookie(options =>
+            {
+                // **核心設定 1：登入頁面路徑**
+                // 當一位「未登入」的使用者嘗試存取一個需要驗證的頁面 (例如 /Profile) 時，
+                // 系統會自動將他「重新導向」到這個路徑 (/Account/Signin)。
+                options.LoginPath = new PathString("/Account/Signin");
+
+                // **核心設定 2：登出路徑**
+                // 當呼叫「登出」動作時，系統會使用的路徑。
+                options.LogoutPath = new PathString("/Account/Signout");
+
+                // **核心設定 3：拒絕存取路徑**
+                // 當一位「已登入」的使用者（例如 UserA）
+                // 嘗試存取一個他「沒有權限」的頁面 (例如 /Admin) 時，
+                // 系統會將他導向到這個路徑。
+                options.AccessDeniedPath = new PathString("/Account/Signin"); // 這裡我們先簡單導回登入頁
+            });
+
         // --- 服務註冊結束 ---
 
 
@@ -80,9 +125,21 @@ public class Program
         // 並決定該由哪一個 Controller 的哪一個 Action 來處理這個請求。
         app.UseRouting();
 
-        // 啟用「授權」中介軟體。
-        // 這必須放在 UseRouting() 之後，用來檢查使用者是否有權限存取該頁面。
+        // --- 啟用驗證、授權、Session ---
+        // **順序必須是：1. 驗證 -> 2. 授權 -> 3. Session**
+
+        // 1. 啟用「驗證」中介軟體
+        //    它會檢查傳入的請求中是否包含有效的 Cookie "通行證"。
+        //    (必須放在 UseRouting 和 UseAuthorization 之間)
+        app.UseAuthentication();
+
+        // 2. 啟用「授權」中介軟體
+        //    它會檢查（已通過驗證的）使用者是否擁有存取該頁面的權限。
         app.UseAuthorization();
+
+        // 3. 啟用「Session」中介軟體
+        //    讓應用程式能夠存取 Session。
+        app.UseSession();
 
         // 告訴應用程式要提供靜態檔案服務 (例如 CSS, JavaScript, 圖片)。
         // 預設會讀取 wwwroot 資料夾中的檔案。
