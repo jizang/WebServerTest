@@ -15,6 +15,7 @@ namespace WebServer
             // 3. 構建應用程序
             var app = builder.Build();
 
+            #region 以下順序不可變動
             // 4. 配置 HTTP 請求管道 (Middleware Pipeline)
             // 如果不是開發環境，則使用異常處理程序
             if (!app.Environment.IsDevelopment())
@@ -44,6 +45,7 @@ namespace WebServer
                                                                     // 預設 Controller = Home
                                                                     // 預設 Action = Index
                                                                     // id? = id 是可選參數
+            #endregion
 
             // 運行應用程序
             app.Run();
