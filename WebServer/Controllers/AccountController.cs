@@ -16,6 +16,14 @@ using WebServer.Models.ViewModels;
 // 引入我們資料庫的 "Models"。這是 EF Core 用來對應資料庫表格的 C# 類別。
 using WebServer.Models.WebServerDB;
 
+// --- 請加入以下 using 宣告 ---
+// 提供了 HttpContext.SignInAsync() (登入) 和 SignOutAsync() (登出) 功能
+using Microsoft.AspNetCore.Authentication;
+// 讓我們可以使用 CookieAuthenticationDefaults.AuthenticationScheme (Cookie 驗證方案)
+using Microsoft.AspNetCore.Authentication.Cookies;
+// 讓我們可以建立使用者的「身分宣告」(Claims)
+using System.Security.Claims;
+
 // "namespace" 是一個「命名空間」，像是一個資料夾，用來組織和分類我們的程式碼。
 // 這裡我們把這個 Controller 放在 WebServer.Controllers 這個資料夾裡。
 namespace WebServer.Controllers
@@ -47,6 +55,149 @@ namespace WebServer.Controllers
             // 我們將系統注入的 context，存到上面宣告的私有欄位 _context 中，
             // 這樣這個類別中的其他方法（例如 Signup）才能使用它。
             _context = context;
+        }
+
+        // ==========================================
+        // == 登入功能 (Signin)
+        // ==========================================
+
+        /// <summary>
+        /// GET: /Account/Signin
+        /// 顯示登入表單頁面
+        /// </summary>
+        /// <param name="returnUrl">
+        /// 使用者原本想去但被 [Authorize] 擋住的網址。
+        /// 這是由 Cookie 驗證中介軟體自動傳入的。
+        /// </param>
+        [HttpGet]
+        public IActionResult Signin(string? returnUrl = null)
+        {
+            var model = new SigninViewModel
+            {
+                ReturnUrl = returnUrl
+            };
+
+            // 檢查是否有來自 Signup 動作的成功訊息 (使用 TempData)
+            if (TempData["SuccessMessage"] != null)
+            {
+                // 將成功訊息放入 ErrorMessage 欄位，只是為了在畫面上顯示
+                model.ErrorMessage = TempData["SuccessMessage"]!.ToString();
+            }
+
+            return View(model);
+        }
+
+        /// <summary>
+        /// POST: /Account/Signin
+        /// 處理登入表單提交
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Signin(SigninViewModel model)
+        {
+            // 檢查表單輸入是否符合 SigninViewModel 的 DataAnnotation 驗證
+            if (ModelState.IsValid)
+            {
+                try
+                {
+                    // 1. 標準化輸入：
+                    //    將使用者輸入的帳號轉為大寫，以便和資料庫中的 Normalize 欄位比對
+                    var accountUpper = model.Account.Trim().ToUpper();
+                    //    使用我們在 Signup 用的同一個雜湊方法
+                    var passwordHash = EncoderSHA512(model.Password);
+
+                    // 2. 查找使用者：
+                    //    同時比對 AccountNormalize 或 EmailNormalize 欄位
+                    var user = await _context.User.FirstOrDefaultAsync(u =>
+                        (u.AccountNormalize == accountUpper || u.EmailNormalize == accountUpper) &&
+                        u.PasswordHash == passwordHash
+                    );
+
+                    // 3. 檢查登入結果：
+                    if (user == null)
+                    {
+                        // 找不到使用者 -> 登入失敗
+                        ModelState.AddModelError(nameof(model.ErrorMessage), "帳號或密碼錯誤");
+                        return View(model);
+                    }
+
+                    // 檢查帳號是否已被鎖定
+                    if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.Now)
+                    {
+                        ModelState.AddModelError(nameof(model.ErrorMessage), "此帳號已被鎖定，請稍後再試");
+                        return View(model);
+                    }
+
+                    // 4. 登入成功：建立使用者的「身分宣告」(Claims)
+                    //    Claims 就像是使用者的「身分證件」，上面記載了他的資訊
+                    var claims = new List<Claim>
+                    {
+                        // (a) NameIdentifier (使用者的唯一 ID)，這非常重要
+                        new Claim(ClaimTypes.NameIdentifier, user.ID.ToString()),
+                        
+                        // (b) Name (使用者的帳號)，方便我們在 View 中顯示 "歡迎, OOO"
+                        new Claim(ClaimTypes.Name, user.Account),
+                        
+                        // (c) 您也可以加入其他資訊，例如 Email 或角色 (Role)
+                        // new Claim(ClaimTypes.Email, user.Email),
+                        // new Claim(ClaimTypes.Role, "Admin"), 
+                    };
+
+                    // 5. 建立身分識別 (Identity) 和主體 (Principal)
+                    //    將 "證件" (Claims) 放入 "皮夾" (ClaimsIdentity)
+                    //    並指定這個皮夾是 "Cookies" 類型的
+                    var claimsIdentity = new ClaimsIdentity(
+                        claims, CookieAuthenticationDefaults.AuthenticationScheme);
+
+                    //    建立「主體」(Principal)，代表當前的登入使用者
+                    var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+                    // 6. 設定驗證屬性 (例如「記住我」)
+                    var authProperties = new AuthenticationProperties
+                    {
+                        // IsPersistent = true: 
+                        // 如果 model.RememberMe 是 true，Cookie 會持久化 (關閉瀏覽器後仍在)。
+                        // 如果是 false (預設)，Cookie 是 Session-only (關閉瀏覽器後自動清除)。
+                        IsPersistent = model.RememberMe
+                    };
+
+                    // 7. 執行登入 (核心)
+                    //    呼叫 HttpContext.SignInAsync，ASP.NET Core 會自動建立加密的 Cookie，
+                    //    並在下次的回應 (Response) 中將它傳送給瀏覽器。
+                    await HttpContext.SignInAsync(
+                        CookieAuthenticationDefaults.AuthenticationScheme, // 必須與 Program.cs 中設定的相符
+                        claimsPrincipal,
+                        authProperties
+                    );
+
+                    // 登入成功，重設登入失敗計次
+                    user.AccessFailedCount = 0;
+                    _context.User.Update(user);
+                    await _context.SaveChangesAsync();
+
+                    // 8. 重新導向
+                    //    檢查是否有 ReturnUrl (使用者原本想去的頁面)
+                    //    Url.IsLocalUrl() 是必要的安全檢查，防止「開放重定向攻擊」
+                    if (!string.IsNullOrEmpty(model.ReturnUrl) && Url.IsLocalUrl(model.ReturnUrl))
+                    {
+                        return Redirect(model.ReturnUrl);
+                    }
+                    else
+                    {
+                        // 如果沒有 ReturnUrl，就導向到網站首頁
+                        return RedirectToAction("Index", "Home");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ModelState.AddModelError(nameof(model.ErrorMessage), "發生未知的錯誤：" + ex.Message);
+                    return View(model);
+                }
+            }
+
+            // 如果 ModelState.IsValid == false (例如密碼欄位空白)
+            // 將 model 傳回 View，View 會自動顯示 DataAnnotation 的錯誤訊息
+            return View(model);
         }
 
         // ==========================================
