@@ -1,38 +1,43 @@
-using System.Diagnostics; // 引入診斷工具，用於獲取當前活動的 ID
-using Microsoft.AspNetCore.Mvc; // 引入 ASP.NET Core MVC 核心功能
-using WebServer.Models; // 引入應用程序的 Models 命名空間 (用於 ErrorViewModel)
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics;
+using WebServer.Models;
 
-namespace WebServer.Controllers // 定義 WebServer 控制器的命名空間
+namespace WebServer.Controllers
 {
-    // HomeController 繼承自 Controller 基類
+    // 1. [Authorize] 放在 Class 層級
+    //    這會保護此 Controller 中的「所有」Action (Index, Privacy, Error)
+    [Authorize]
     public class HomeController : Controller
     {
-        private readonly ILogger<HomeController> _logger; // 定義日誌記錄器
+        private readonly ILogger<HomeController> _logger;
 
-        // 控制器的建構函數，通過 DI 注入 ILogger
         public HomeController(ILogger<HomeController> logger)
         {
-            _logger = logger; // 將傳入的 logger 實例賦值
+            _logger = logger;
         }
 
-        // Index 動作方法 (Action)，對應 /Home/Index
+        // 2. 首頁
+        //    因為 Class 已經有 [Authorize]，此 Action 會自動被保護
+        //    (不需要額外再加 [Authorize])
         public IActionResult Index()
         {
-            // return View() 會回傳對應的 Razor 視圖 (Views/Home/Index.cshtml)
             return View();
         }
 
-        // Privacy 動作方法，對應 /Home/Privacy
+        // 3. Privacy 頁面
+        //    因為 Class 已經有 [Authorize]，此 Action 會自動被保護
+        //    (不需要額外再加 [Authorize])
         public IActionResult Privacy()
         {
-            return View(); // 回傳 Views/Home/Privacy.cshtml
+            return View();
         }
 
-        // Error 動作方法，對應 /Home/Error
-        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)] // 禁用此頁面的快取
+        // 4. Error 頁面也應該保持公開
+        [AllowAnonymous]
+        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {
-            // 創建一個 ErrorViewModel 實例，並將請求 ID 傳遞給它
             return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
         }
     }
