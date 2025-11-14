@@ -467,5 +467,34 @@ namespace WebServer.Controllers
                 // 但對於教學來說，SHA-512 是一個很清楚的「單向雜湊」範例。
             }
         }
+
+        // ==========================================
+        // == 登出功能 (Signout)
+        // ==========================================
+
+        /// <summary>
+        /// 登出系統
+        /// </summary>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> Signout()
+        {
+            // 1. 執行登出 (清除身分驗證 Cookie)
+            // 必須使用與登入時相同的驗證方案 (CookieAuthenticationDefaults.AuthenticationScheme)
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+            // 2. 清除 Session 資料 (如果有使用 Session)
+            HttpContext.Session.Clear();
+
+            // 3. 清除所有瀏覽器 Cookies (確保乾淨登出)
+            // 遍歷請求中的所有 Cookie 並將其過期時間設為過去，以達到刪除效果
+            foreach (var cookie in Request.Cookies.Keys)
+            {
+                Response.Cookies.Delete(cookie);
+            }
+
+            // 4. 登出後導向回登入頁面
+            return RedirectToAction("Signin", "Account");
+        }
     }
 }
