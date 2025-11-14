@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using WebServer.Models.NorthwindDB;
 
@@ -49,5 +50,50 @@ namespace WebServer.Controllers
         }
 
         #endregion
+
+        #region Create 新增
+        // GET: 顯示新增表單
+        public IActionResult Create()
+        {
+            LoadViewBagData(); // 載入下拉選單資料
+            return View();
+        }
+
+        // POST: 接收新增資料
+        [HttpPost]
+        [ValidateAntiForgeryToken] // 防止 CSRF 攻擊
+        public async Task<IActionResult> Create(Products product)
+        {
+            // 移除對導覽屬性的驗證 (避免 ModelState 因為 Category/Supplier 為 null 而報錯)
+            ModelState.Remove("Category");
+            ModelState.Remove("Supplier");
+            ModelState.Remove("Order_Details");
+
+            if (ModelState.IsValid)
+            {
+                _northwindDB.Add(product);
+                await _northwindDB.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
+            }
+
+            // 驗證失敗，重新載入選單並回傳原表單
+            LoadViewBagData();
+            return View(product);
+        }
+        #endregion
+
+        // 私有方法：載入下拉選單資料
+        private void LoadViewBagData()
+        {
+            // 這裡的 Value 對應 Product 裡的 FK (SupplierID, CategoryID)
+            // Text 對應顯示名稱 (CompanyName, CategoryName)
+            ViewBag.SupplierID = new SelectList(_northwindDB.Suppliers, "SupplierID", "CompanyName");
+            ViewBag.CategoryID = new SelectList(_northwindDB.Categories, "CategoryID", "CategoryName");
+        }
+
+        private bool ProductExists(int id)
+        {
+            return _northwindDB.Products.Any(e => e.ProductID == id);
+        }
     }
 }
