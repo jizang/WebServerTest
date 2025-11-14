@@ -31,6 +31,7 @@ public class Program
         builder.Services.AddControllersWithViews();
 
         // --- 註冊您的資料庫服務 ---
+        #region 註冊服務只要在這個區塊內註冊，沒有順序性
 
         // 1. 從 appsettings.json 讀取資料庫連線字串
         //    builder.Configuration 會自動讀取 appsettings.json 和 appsettings.Development.json 的設定。
@@ -94,6 +95,10 @@ public class Program
                 options.AccessDeniedPath = new PathString("/Account/Signin"); // 這裡我們先簡單導回登入頁
             });
 
+        // 註冊 IHttpContextAccessor，讓其他類別 (如 ViewComponent) 能存取 HttpContext
+        builder.Services.AddHttpContextAccessor();
+
+        #endregion
         // --- 服務註冊結束 ---
 
 
