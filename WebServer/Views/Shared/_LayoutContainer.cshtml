@@ -515,7 +515,14 @@
                 </li>
 
                 <!-- User -->
+
+                @* 方法一：必須啟用 TagHelper。若沒啟用，不會有識別顏色的變化(變成綠色) *@
                 <vc:user-profile></vc:user-profile>
+
+                 @* 方法二：直接呼叫 Component 
+                @await Component.InvokeAsync("UserProfile")
+                *@
+
                 <!--/ User -->
               </ul>
             </div>
