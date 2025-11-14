@@ -1,0 +1,80 @@
+﻿@model WebServer.Models.ViewModels.SidebarViewModel
+
+@{
+    // 1. 取得當前路由資訊 (處理 null 的情況)
+    var currentController = ViewContext.RouteData.Values["Controller"]?.ToString() ?? "";
+    var currentAction = ViewContext.RouteData.Values["Action"]?.ToString() ?? "";
+
+    // 2. 定義一個本地函數來判斷是否 Active (避免重複寫邏輯)
+    bool IsActive(string? menuCtrl, string? menuAct)
+    {
+        if (string.IsNullOrEmpty(menuCtrl) || string.IsNullOrEmpty(menuAct)) return false;
+
+        return currentController.Equals(menuCtrl, StringComparison.OrdinalIgnoreCase) &&
+               currentAction.Equals(menuAct, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+<aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
+    <div class="app-brand demo">
+        <a href="/" class="app-brand-link">
+            <span class="app-brand-text demo menu-text fw-bolder ms-2">Sneat</span>
+        </a>
+    </div>
+
+    <div class="menu-inner-shadow"></div>
+
+    <ul class="menu-inner py-1">
+        @foreach (var item in Model.MenuItems)
+        {
+            // 判斷是否有子選單
+            if (item.SubItems != null && item.SubItems.Any())
+            {
+                // --- 有子選單 (父層) ---
+                // 判斷邏輯：只要子選單中有任何一個是 Active，父層就應該展開 (open) 且標示為活躍 (active)
+                var isParentActive = item.SubItems.Any(sub => IsActive(sub.Controller, sub.Action));
+
+                var openClass = isParentActive ? "active open" : "";
+
+                <li class="menu-item @openClass">
+                    <a href="javascript:void(0);" class="menu-link menu-toggle">
+                        <i class="menu-icon tf-icons @item.Icon"></i> <div data-i18n="@item.Title">@item.Title</div>
+                    </a>
+
+                    <ul class="menu-sub">
+                        @foreach (var sub in item.SubItems)
+                        {
+                            var activeClass = IsActive(sub.Controller, sub.Action) ? "active" : "";
+
+                            var targetUrl = (!string.IsNullOrEmpty(sub.Controller) && !string.IsNullOrEmpty(sub.Action))
+                            ? Url.Action(sub.Action, sub.Controller)
+                            : sub.URL;
+
+                            <li class="menu-item @activeClass">
+                                <a href="@targetUrl" class="menu-link">
+                                    <div data-i18n="@sub.Title">@sub.Title</div>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </li>
+            }
+            else
+            {
+                // --- 無子選單 (單層) ---
+                var activeClass = IsActive(item.Controller, item.Action) ? "active" : "";
+
+                var targetUrl = (!string.IsNullOrEmpty(item.Controller) && !string.IsNullOrEmpty(item.Action))
+                ? Url.Action(item.Action, item.Controller)
+                : item.URL;
+
+                <li class="menu-item @activeClass">
+                    <a href="@targetUrl" class="menu-link">
+                        <i class="menu-icon tf-icons @item.Icon"></i>
+                        <div data-i18n="@item.Title">@item.Title</div>
+                    </a>
+                </li>
+            }
+        }
+    </ul>
+</aside>
