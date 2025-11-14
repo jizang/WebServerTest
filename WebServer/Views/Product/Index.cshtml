@@ -47,7 +47,10 @@
                 // 欄位對應 Controller 的匿名物件屬性 (camelCase)
                 "columns": [
                     { "data": "productID", "width": "5%" },
-                    { "data": "productName", "width": "20%", "className": "fw-bold"},
+                    { "data": "productName", "width": "20%", "className": "fw-bold",
+                              "render": function (e) {
+                               return e ? e.replace('C', '*') : e;
+                        }  },
                     { "data": "categoryName", "width": "12%" },
                     { "data": "supplierName", "width": "15%" },
                     {
