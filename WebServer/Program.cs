@@ -52,10 +52,10 @@ public class Program
         );
 
         // 註冊 Northwind 資料庫服務
-        connectionString = builder.Configuration.GetConnectionString("NorthwindDB");
+        var connectionString2 = builder.Configuration.GetConnectionString("NorthwindDB");
         builder.Services.AddDbContext<NorthwindDBContext>(options =>
         {
-            options.UseSqlServer(connectionString);
+            options.UseSqlServer(connectionString2);
         });
 
         //    註冊完成後，未來我們就可以在 Controller 的「建構函式」中
