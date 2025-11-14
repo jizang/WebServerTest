@@ -26,7 +26,7 @@ namespace WebServer.Controllers
         public async Task<IActionResult> GetProductsJson()
         {
             // 使用 Select 投影，避免循環參照並只取需要的欄位
-            var products = await _northwindDB.Products
+            var query = _northwindDB.Products
                 .Include(p => p.Category)
                 .Include(p => p.Supplier)
                 .Select(p => new
@@ -39,8 +39,11 @@ namespace WebServer.Controllers
                     p.UnitPrice,
                     p.UnitsInStock,
                     p.Discontinued
-                })
-                .ToListAsync();
+                });
+
+            var sql = query.ToQueryString();
+
+            var products = await query.ToListAsync();
 
             return Json(new { data = products });
         }
