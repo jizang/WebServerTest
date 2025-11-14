@@ -1,0 +1,53 @@
+﻿@* 接收 Component 傳來的 User 物件，允許為 null *@
+@model WebServer.Models.WebServerDB.User?
+
+@{
+    var userName = Model != null ? Model.Name : "訪客";
+    var userEmail = Model != null ? Model.Email : "尚未登入";
+    // 這裡假設有一個預設頭像路徑，若 User 有上傳頭像可在此邏輯判斷
+    var avatarUrl = "/assets/img/avatars/7.png";
+}
+
+<li class="nav-item navbar-dropdown dropdown-user dropdown">
+    <a class="nav-link dropdown-toggle hide-arrow" href="javascript:void(0);" data-bs-toggle="dropdown">
+        <div class="avatar avatar-online">
+            <img src="@avatarUrl" class="w-px-40 h-auto rounded-circle" />
+        </div>
+    </a>
+    <ul class="dropdown-menu dropdown-menu-end">
+        <li>
+            <a class="dropdown-item" href="#">
+                <div class="d-flex">
+                    <div class="flex-shrink-0 me-3">
+                        <div class="avatar avatar-online">
+                            <img src="@avatarUrl" class="w-px-40 h-auto rounded-circle" />
+                        </div>
+                    </div>
+                    <div class="flex-grow-1">
+                        <span class="fw-semibold d-block">@userName</span>
+                        <small class="text-muted">@userEmail</small>
+                    </div>
+                </div>
+            </a>
+        </li>
+        <li>
+            <div class="dropdown-divider"></div>
+        </li>
+        <li>
+            <a class="dropdown-item" href="#">
+                <i class="bx bx-user me-2"></i>
+                <span class="align-middle">我的個人資料</span>
+            </a>
+        </li>
+        <li>
+            <div class="dropdown-divider"></div>
+        </li>
+        <li>
+            @* 設定登出連結 *@
+            <a class="dropdown-item" href="/Account/Signout">
+                <i class="bx bx-power-off me-2"></i>
+                <span class="align-middle">登出</span>
+            </a>
+        </li>
+    </ul>
+</li>
