@@ -95,5 +95,49 @@ namespace WebServer.Controllers
         {
             return _northwindDB.Products.Any(e => e.ProductID == id);
         }
+
+        #region Edit 編輯
+        // GET: 顯示編輯表單
+        public async Task<IActionResult> Edit(int? id)
+        {
+            if (id == null) return NotFound();
+
+            var product = await _northwindDB.Products.FindAsync(id);
+            if (product == null) return NotFound();
+
+            LoadViewBagData(); // 載入下拉選單資料
+            return View(product);
+        }
+
+        // POST: 接收編輯資料
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(int id, Products product)
+        {
+            if (id != product.ProductID) return NotFound();
+
+            ModelState.Remove("Category");
+            ModelState.Remove("Supplier");
+            ModelState.Remove("Order_Details");
+
+            if (ModelState.IsValid)
+            {
+                try
+                {
+                    _northwindDB.Update(product);
+                    await _northwindDB.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!ProductExists(product.ProductID)) return NotFound();
+                    else throw;
+                }
+                return RedirectToAction(nameof(Index));
+            }
+
+            LoadViewBagData();
+            return View(product);
+        }
+        #endregion
     }
 }
