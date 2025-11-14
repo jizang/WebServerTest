@@ -517,6 +517,11 @@
                 <!-- User -->
 
                 @* 方法一：必須啟用 TagHelper。若沒啟用，不會有識別顏色的變化(變成綠色) *@
+                @* vc:xxxxx 元件名稱範例說明：xxxxx 只允許小寫。第一碼不分大小寫，之後的大寫改為 前綴 '-' + 小寫
+                   UserProfile -> user-profile
+                   Userprofile -> userprofile,
+                   userProFile -> user-pro-file
+                *@
                 <vc:user-profile></vc:user-profile>
 
                  @* 方法二：直接呼叫 Component 
