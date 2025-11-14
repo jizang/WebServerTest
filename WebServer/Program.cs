@@ -2,6 +2,8 @@
 // EF Core 是一個 ORM (物件關聯對應) 框架，讓我們可以用 C# 物件來操作資料庫。
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+using WebServer.Models.NorthwindDB;
+
 
 // 引入我們使用 EF Core Power Tools 從資料庫產生的 Model 和 DbContext 所在的命名空間。
 // WebServerDBContext.cs 和 User.cs 都在這個命名空間下。
@@ -48,6 +50,14 @@ public class Program
             // (b) 連線時請使用我們剛剛讀取到的 connectionString 變數。
             options.UseSqlServer(connectionString)
         );
+
+        // 註冊 Northwind 資料庫服務
+        connectionString = builder.Configuration.GetConnectionString("NorthwindDB");
+        builder.Services.AddDbContext<NorthwindDBContext>(options =>
+        {
+            options.UseSqlServer(connectionString);
+        });
+
         //    註冊完成後，未來我們就可以在 Controller 的「建構函式」中
         //    直接要求傳入 WebServerDBContext，DI 容器就會自動幫我們建立並傳入。
 
