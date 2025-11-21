@@ -9,6 +9,9 @@
 <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="fw-bold py-3 mb-0">訂單列表</h4>
+        <button type="button" class="btn btn-success me-2" onclick="exportExcel()">
+            <i class="bx bx-export me-1"></i> 匯出 Excel
+        </button>
         <a class="btn btn-primary" href="/Order/Create">
             <i class="bx bx-plus me-1"></i> 新增訂單
         </a>
@@ -155,6 +158,19 @@
                 console.error('Error:', error);
                 alert('發生錯誤，請稍後再試。');
             }
+            }
+
+        // [新增] 匯出 Excel 函式
+        function exportExcel() {
+            // 1. 取得 DataTables 目前的搜尋關鍵字
+            // DataTables 的搜尋框預設 ID 或 class 可能不同，建議直接透過 API 取得
+            // 或者簡單點：抓取 input 標籤的值 (DataTables 預設會產生 input type="search")
+            var table = $('#orderTable').DataTable();
+            var searchValue = table.search(); // 取得目前搜尋框的值
+
+            // 2. 導向 Export Action (透過 GET 傳遞參數)
+            // 使用 encodeURIComponent 確保特殊字元正確傳遞
+            window.location.href = `/Order/Export?searchValue=${encodeURIComponent(searchValue)}`;
         }
     </script>
 }

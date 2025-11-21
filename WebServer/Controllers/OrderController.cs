@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using ClosedXML.Excel;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebServer.Models.NorthwindDB;
 
@@ -426,6 +427,100 @@ public class OrderController : Controller
             await transaction.RollbackAsync();
             // 記錄錯誤 (Log.Error...)
             return StatusCode(500, new { success = false, message = "刪除失敗：" + ex.Message });
+        }
+    }
+    #endregion
+
+    #region 7. Export 匯出 Excel
+    [HttpGet] // 使用 GET 請求即可
+    public async Task<IActionResult> Export(string? searchValue)
+    {
+        // 1. 查詢資料 (邏輯與 GetOrders 類似，但不需分頁)
+        var query = _context.Orders
+            .Include(o => o.Customer)
+            .Include(o => o.Employee)
+            .Include(o => o.Order_Details) // 需包含明細以計算總金額
+            .AsNoTracking()
+            .AsQueryable();
+
+        // 2. 搜尋條件 (與 GetOrders 保持一致)
+        if (!string.IsNullOrEmpty(searchValue))
+        {
+            string sQuery = searchValue.ToUpper();
+            query = query.Where(o =>
+                o.OrderID.ToString().Contains(sQuery) ||
+                (o.Customer != null && o.Customer.CompanyName.ToUpper().Contains(sQuery)) ||
+                (o.Employee != null && (o.Employee.FirstName + " " + o.Employee.LastName).ToUpper().Contains(sQuery))
+            );
+        }
+
+        // 3. 取得資料 (依 OrderID 排序)
+        var orders = await query
+            .OrderByDescending(o => o.OrderID)
+            .Select(o => new
+            {
+                o.OrderID,
+                CustomerName = o.Customer != null ? o.Customer.CompanyName : "",
+                EmployeeName = o.Employee != null ? o.Employee.FirstName + " " + o.Employee.LastName : "",
+                OrderDate = o.OrderDate,
+                Freight = o.Freight,
+                // 計算總金額
+                TotalAmount = o.Order_Details.Sum(d => (double)d.UnitPrice * d.Quantity * (1 - d.Discount))
+            })
+            .ToListAsync();
+
+        // 4. 產生 Excel
+        using (var workbook = new XLWorkbook())
+        {
+            var worksheet = workbook.Worksheets.Add("訂單列表");
+
+            // 4-1. 設定表頭
+            worksheet.Cell(1, 1).Value = "訂單編號";
+            worksheet.Cell(1, 2).Value = "客戶";
+            worksheet.Cell(1, 3).Value = "負責員工";
+            worksheet.Cell(1, 4).Value = "訂單日期";
+            worksheet.Cell(1, 5).Value = "運費";
+            worksheet.Cell(1, 6).Value = "總金額";
+
+            // 設定表頭樣式 (背景色、粗體、置中)
+            var headerRange = worksheet.Range("A1:F1");
+            headerRange.Style.Fill.BackgroundColor = XLColor.CornflowerBlue;
+            headerRange.Style.Font.FontColor = XLColor.White;
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            // 4-2. 填入資料
+            int row = 2;
+            foreach (var item in orders)
+            {
+                worksheet.Cell(row, 1).Value = item.OrderID;
+                worksheet.Cell(row, 2).Value = item.CustomerName;
+                worksheet.Cell(row, 3).Value = item.EmployeeName;
+                worksheet.Cell(row, 4).Value = item.OrderDate; // ClosedXML 會自動處理 DateTime
+                worksheet.Cell(row, 5).Value = item.Freight;
+                worksheet.Cell(row, 6).Value = item.TotalAmount;
+                row++;
+            }
+
+            // 4-3. 調整格式
+            // 設定日期格式
+            worksheet.Column(4).Style.DateFormat.Format = "yyyy-MM-dd";
+            // 設定貨幣格式
+            worksheet.Column(5).Style.NumberFormat.Format = "$ #,##0.00";
+            worksheet.Column(6).Style.NumberFormat.Format = "$ #,##0.00";
+
+            // 自動調整欄寬
+            worksheet.Columns().AdjustToContents();
+
+            // 5. 輸出檔案
+            using (var stream = new MemoryStream())
+            {
+                workbook.SaveAs(stream);
+                var content = stream.ToArray();
+                return File(content,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    $"Orders_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+            }
         }
     }
     #endregion
