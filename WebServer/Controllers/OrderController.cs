@@ -115,5 +115,73 @@ public class OrderController : Controller
     }
     #endregion
 
+    #region 2. Select2 AJAX 資料來源 (下拉選單用)
+    // 取得客戶列表
+    [HttpGet]
+    public async Task<IActionResult> GetCustomers(string term, int page = 1, int pageSize = 10)
+    {
+        var query = _context.Customers.AsNoTracking().AsQueryable();
+
+        // 搜尋邏輯
+        if (!string.IsNullOrEmpty(term))
+        {
+            query = query.Where(c => c.CompanyName.Contains(term) || c.CustomerID.Contains(term));
+        }
+
+        int totalCount = await query.CountAsync();
+        var items = await query.OrderBy(c => c.CustomerID)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(c => new { id = c.CustomerID, text = c.CompanyName + " (" + c.CustomerID + ")" })
+            .ToListAsync();
+
+        return Json(new { results = items, pagination = new { more = (page * pageSize) < totalCount } });
+    }
+
+    // 取得員工列表
+    [HttpGet]
+    public async Task<IActionResult> GetEmployees(string term, int page = 1, int pageSize = 10)
+    {
+        var query = _context.Employees.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrEmpty(term))
+        {
+            query = query.Where(e => e.FirstName.Contains(term) || e.LastName.Contains(term));
+        }
+
+        int totalCount = await query.CountAsync();
+        var items = await query.OrderBy(e => e.EmployeeID)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(e => new { id = e.EmployeeID, text = e.FirstName + " " + e.LastName })
+            .ToListAsync();
+
+        return Json(new { results = items, pagination = new { more = (page * pageSize) < totalCount } });
+    }
+
+    // 取得產品列表 (包含單價，供前端連動)
+    [HttpGet]
+    public async Task<IActionResult> GetProducts(string term, int page = 1, int pageSize = 10)
+    {
+        var query = _context.Products.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrEmpty(term))
+        {
+            query = query.Where(p => p.ProductName.Contains(term));
+        }
+
+        int totalCount = await query.CountAsync();
+        var items = await query.OrderBy(p => p.ProductName)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(p => new
+            {
+                id = p.ProductID,
+                text = p.ProductName,
+                price = p.UnitPrice // 回傳單價供前端自動帶入
+            })
+            .ToListAsync();
+
+        return Json(new { results = items, pagination = new { more = (page * pageSize) < totalCount } });
+    }
+    #endregion
+
     // ... (Create, Edit, Delete 等 Action 稍後實作)
 }
