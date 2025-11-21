@@ -260,4 +260,107 @@ public class OrderController : Controller
         }
     }
     #endregion
+
+    #region 4. Edit 編輯訂單
+    // GET: 顯示編輯表單
+    public async Task<IActionResult> Edit(int? id)
+    {
+        if (id == null) return NotFound();
+
+        // 1. 撈取訂單及其關聯資料 (包含明細與產品名稱)
+        var order = await _context.Orders
+            .Include(o => o.Order_Details).ThenInclude(od => od.Product)
+            .FirstOrDefaultAsync(m => m.OrderID == id);
+
+        if (order == null) return NotFound();
+
+        // 2. 轉換為 ViewModel
+        var model = new WebServer.Models.ViewModels.OrderViewModel
+        {
+            OrderID = order.OrderID,
+            CustomerID = order.CustomerID,
+            EmployeeID = order.EmployeeID,
+            OrderDate = order.OrderDate,
+            RequiredDate = order.RequiredDate,
+            Freight = order.Freight,
+            ShipName = order.ShipName,
+            ShipAddress = order.ShipAddress,
+            // 轉換明細
+            OrderDetails = order.Order_Details.Select(od => new WebServer.Models.ViewModels.OrderDetailViewModel
+            {
+                ProductID = od.ProductID,
+                ProductName = od.Product.ProductName, // 顯示用
+                UnitPrice = od.UnitPrice,
+                Quantity = od.Quantity,
+                Discount = od.Discount
+            }).ToList()
+        };
+
+        return View(model);
+    }
+
+    // POST: 接收 JSON 更新資料
+    [HttpPost]
+    public async Task<IActionResult> Edit([FromBody] WebServer.Models.ViewModels.OrderViewModel model)
+    {
+        // 1. 驗證
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+            return BadRequest(new { success = false, message = "資料驗證失敗", errors = errors });
+        }
+
+        // 2. 開啟交易
+        using var transaction = _context.Database.BeginTransaction();
+        try
+        {
+            // 3. 撈取資料庫中現有的訂單 (包含明細以便刪除)
+            var order = await _context.Orders
+                .Include(o => o.Order_Details)
+                .FirstOrDefaultAsync(o => o.OrderID == model.OrderID);
+
+            if (order == null) return NotFound(new { success = false, message = "找不到此訂單" });
+
+            // 4. 更新主檔欄位
+            order.CustomerID = model.CustomerID;
+            order.EmployeeID = model.EmployeeID;
+            order.OrderDate = model.OrderDate;
+            order.RequiredDate = model.RequiredDate;
+            order.Freight = model.Freight;
+            order.ShipName = model.ShipName;
+            order.ShipAddress = model.ShipAddress;
+
+            // 5. 更新明細 (策略：先刪除舊的，再加入新的)
+            // 5-1. 移除現有明細
+            _context.Order_Details.RemoveRange(order.Order_Details);
+
+            // 5-2. 加入新明細
+            if (model.OrderDetails != null && model.OrderDetails.Any())
+            {
+                foreach (var item in model.OrderDetails)
+                {
+                    _context.Order_Details.Add(new Order_Details
+                    {
+                        OrderID = order.OrderID,
+                        ProductID = item.ProductID,
+                        UnitPrice = item.UnitPrice,
+                        Quantity = item.Quantity,
+                        Discount = item.Discount
+                    });
+                }
+            }
+
+            // 6. 儲存並提交
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new { success = true, message = "訂單更新成功！" });
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            return StatusCode(500, new { success = false, message = "更新失敗：" + ex.Message });
+        }
+    }
+    #endregion
 }

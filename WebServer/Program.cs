@@ -8,6 +8,7 @@ using WebServer.Models.NorthwindDB;
 // 引入我們使用 EF Core Power Tools 從資料庫產生的 Model 和 DbContext 所在的命名空間。
 // WebServerDBContext.cs 和 User.cs 都在這個命名空間下。
 using WebServer.Models.WebServerDB;
+using WebServer.Services;
 
 namespace WebServer;
 
@@ -108,6 +109,8 @@ public class Program
         // 註冊 IHttpContextAccessor，讓其他類別 (如 ViewComponent) 能存取 HttpContext
         builder.Services.AddHttpContextAccessor();
 
+        // [新增] 註冊 UI 服務 (Scoped 即可，因為它依賴 DbContext)
+        builder.Services.AddScoped<NorthwindUiService>();
         #endregion
         // --- 服務註冊結束 ---
 

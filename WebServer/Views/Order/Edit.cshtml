@@ -1,0 +1,289 @@
+﻿@model WebServer.Models.ViewModels.OrderViewModel
+@* 注入剛剛寫的服務 *@
+@inject WebServer.Services.NorthwindUiService _uiService
+
+@{
+    ViewData["Title"] = "編輯訂單";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="/lib/select2/css/select2.min.css" />
+    <link rel="stylesheet" href="/lib/select2-bootstrap-5-theme/select2-bootstrap-5-theme.min.css" />
+}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+    <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">訂單管理 /</span> 編輯訂單 #@Model.OrderID</h4>
+
+    <form id="editForm">
+        <input type="hidden" asp-for="OrderID" />
+
+        <div class="card mb-4">
+            <div class="card-header bg-light fw-bold">訂單資訊</div>
+            <div class="card-body mt-3">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label asp-for="CustomerID" class="form-label"></label>
+                        <select asp-for="CustomerID" class="form-select select2-customer">
+                            @if (Model.CustomerID != null)
+                            {
+                                // 直接呼叫 Service 取得名稱
+                                // 注意：因為是 async 方法，View 中要加 await
+                                <option value="@Model.CustomerID" selected>
+                                    @(await _uiService.GetCustomerLabelAsync(Model.CustomerID))
+                                </option>
+                            }
+                        </select>
+                        <span asp-validation-for="CustomerID" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label asp-for="EmployeeID" class="form-label"></label>
+                        <select asp-for="EmployeeID" class="form-select select2-employee">
+                            @if (Model.EmployeeID != null)
+                            {
+                                // 直接呼叫 Service 取得名稱
+                                <option value="@Model.EmployeeID" selected>
+                                    @(await _uiService.GetEmployeeLabelAsync(Model.EmployeeID))
+                                </option>
+                            }
+                        </select>
+                        <span asp-validation-for="EmployeeID" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="OrderDate" class="form-label"></label>
+                        <input asp-for="OrderDate" class="form-control" />
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="RequiredDate" class="form-label"></label>
+                        <input asp-for="RequiredDate" class="form-control" />
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="Freight" class="form-label"></label>
+                        <input asp-for="Freight" type="number" step="0.01" class="form-control" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label asp-for="ShipName" class="form-label"></label>
+                        <input asp-for="ShipName" class="form-control" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label asp-for="ShipAddress" class="form-label"></label>
+                        <input asp-for="ShipAddress" class="form-control" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <span class="fw-bold">訂單明細</span>
+                <button type="button" class="btn btn-sm btn-primary" id="btnAddDetail">
+                    <i class="bx bx-plus"></i> 新增商品
+                </button>
+            </div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-bordered mb-0" id="detailTable">
+                    <thead>
+                        <tr class="table-secondary text-center">
+                            <th style="width: 35%;">產品</th>
+                            <th style="width: 15%;">單價</th>
+                            <th style="width: 15%;">數量</th>
+                            <th style="width: 15%;">折扣 (0-1)</th>
+                            <th style="width: 15%;">小計</th>
+                            <th style="width: 5%;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="detailBody">
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="4" class="text-end fw-bold">總計:</td>
+                            <td class="text-end fw-bold text-danger" id="grandTotal">$0.00</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <div class="mt-4 text-end">
+            <a asp-action="Index" class="btn btn-label-secondary">返回列表</a>
+            <button type="submit" class="btn btn-primary">儲存更新</button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <script src="/lib/select2/js/select2.min.js"></script>
+    <script>
+        // 取得後端傳來的初始明細資料 (ViewModel 轉 JSON)
+        const initialDetails = @Html.Raw(Json.Serialize(Model.OrderDetails));
+
+        $(document).ready(function () {
+            // 1. 初始化 Select2 (Master)
+            initSelect2('.select2-customer', '/Order/GetCustomers', '搜尋客戶...');
+            initSelect2('.select2-employee', '/Order/GetEmployees', '搜尋員工...');
+
+            // 2. 載入初始明細資料
+            if (initialDetails && initialDetails.length > 0) {
+                initialDetails.forEach(item => {
+                    addDetailRow(item);
+                });
+            } else {
+                // 若無明細則預設新增一列
+                addDetailRow();
+            }
+            updateGrandTotal();
+
+            // 3. 綁定按鈕與輸入事件 (同 Create)
+            $('#btnAddDetail').click(() => addDetailRow());
+
+            $('#detailBody').on('click', '.btn-remove', function () {
+                $(this).closest('tr').remove();
+                updateGrandTotal();
+            });
+
+            $('#detailBody').on('input', '.calc-input', function () {
+                const row = $(this).closest('tr');
+                calculateRow(row);
+                updateGrandTotal();
+            });
+
+            // 4. 表單送出
+            $('#editForm').submit(function (e) {
+                e.preventDefault();
+                submitOrder();
+            });
+        });
+
+        // --- 函式區 ---
+
+        function initSelect2(selector, url, placeholder) {
+            $(selector).select2({
+                theme: 'bootstrap-5',
+                ajax: {
+                    url: url,
+                    dataType: 'json',
+                    delay: 250,
+                    data: params => ({ term: params.term, page: params.page || 1 })
+                },
+                placeholder: placeholder,
+                allowClear: true
+            });
+        }
+
+        // 新增一列 (支援帶入預設值 data)
+        function addDetailRow(data = null) {
+            const html = `
+                <tr>
+                    <td><select class="form-select select2-product" style="width:100%"></select></td>
+                    <td><input type="number" class="form-control text-end calc-input unit-price" step="0.01" readonly value="${data ? data.unitPrice : ''}"></td>
+                    <td><input type="number" class="form-control text-center calc-input quantity" min="1" value="${data ? data.quantity : 1}"></td>
+                    <td><input type="number" class="form-control text-center calc-input discount" step="0.05" min="0" max="1" value="${data ? data.discount : 0}"></td>
+                    <td class="text-end fw-bold row-subtotal">$0.00</td>
+                    <td class="text-center"><button type="button" class="btn btn-sm btn-danger btn-remove"><i class="bx bx-trash"></i></button></td>
+                </tr>`;
+
+            const $row = $(html);
+            $('#detailBody').append($row);
+
+            // 初始該列的 Select2
+            const $select = $row.find('.select2-product');
+
+            // 若有 data (編輯模式回填)，需手動建立 Option 並選取
+            if (data) {
+                // data.productName 來自 ViewModel
+                const option = new Option(data.productName, data.productID, true, true);
+                $select.append(option).trigger('change'); // 觸發 change 以便 Select2 更新 UI，但不一定觸發 select2:select
+
+                // 手動觸發一次計算
+                calculateRow($row);
+            }
+
+            $select.select2({
+                theme: 'bootstrap-5',
+                ajax: {
+                    url: '/Order/GetProducts',
+                    dataType: 'json',
+                    delay: 250,
+                    data: params => ({ term: params.term, page: params.page || 1 }),
+                    processResults: data => ({
+                        results: data.results.map(item => ({ id: item.id, text: item.text, price: item.price })),
+                        pagination: data.pagination
+                    })
+                },
+                placeholder: '搜尋產品...',
+            });
+
+            $select.on('select2:select', function (e) {
+                const price = e.params.data.price;
+                $row.find('.unit-price').val(price);
+                calculateRow($row);
+                updateGrandTotal();
+            });
+        }
+
+        function calculateRow(row) {
+            const price = parseFloat(row.find('.unit-price').val()) || 0;
+            const qty = parseInt(row.find('.quantity').val()) || 0;
+            const discount = parseFloat(row.find('.discount').val()) || 0;
+            const subtotal = (price * qty) * (1 - discount);
+            row.find('.row-subtotal').text('$' + subtotal.toFixed(2)).data('val', subtotal);
+        }
+
+        function updateGrandTotal() {
+            let total = 0;
+            $('.row-subtotal').each(function () { total += ($(this).data('val') || 0); });
+            $('#grandTotal').text('$' + total.toFixed(2));
+        }
+
+        function submitOrder() {
+            const data = {
+                OrderID: $('#OrderID').val(), // 記得帶 ID
+                CustomerID: $('#CustomerID').val(),
+                EmployeeID: $('#EmployeeID').val(),
+                OrderDate: $('#OrderDate').val(),
+                RequiredDate: $('#RequiredDate').val(),
+                Freight: $('#Freight').val(),
+                ShipName: $('#ShipName').val(),
+                ShipAddress: $('#ShipAddress').val(),
+                OrderDetails: []
+            };
+
+            $('#detailBody tr').each(function () {
+                const row = $(this);
+                const pid = row.find('.select2-product').val();
+                if (pid) {
+                    data.OrderDetails.push({
+                        ProductID: parseInt(pid),
+                        UnitPrice: parseFloat(row.find('.unit-price').val()),
+                        Quantity: parseInt(row.find('.quantity').val()),
+                        Discount: parseFloat(row.find('.discount').val())
+                    });
+                }
+            });
+
+            if (data.OrderDetails.length === 0) {
+                alert("請至少新增一筆明細！");
+                return;
+            }
+
+            fetch('/Order/Edit', { // 改打 Edit API
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(res => {
+                if (res.success) {
+                    alert(res.message);
+                    window.location.href = '/Order/Index';
+                } else {
+                    alert("更新失敗：" + (res.message || "未知錯誤"));
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert("發生系統錯誤");
+            });
+        }
+    </script>
+}
