@@ -1,0 +1,100 @@
+﻿@model WebServer.Models.NorthwindDB.Orders
+
+@{
+    ViewData["Title"] = "訂單明細";
+}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="fw-bold py-3 mb-0"><span class="text-muted fw-light">訂單管理 /</span> 訂單 #@Model.OrderID 明細</h4>
+        <div>
+            <a asp-action="Edit" asp-route-id="@Model.OrderID" class="btn btn-warning">
+                <i class="bx bx-edit-alt me-1"></i> 編輯
+            </a>
+            <a asp-action="Index" class="btn btn-secondary">
+                <i class="bx bx-arrow-back me-1"></i> 返回列表
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white fw-bold">
+            <i class="bx bx-file me-1"></i> 基本資訊
+        </div>
+        <div class="card-body mt-3">
+            <dl class="row mb-0">
+                <dt class="col-sm-3 text-muted">客戶名稱</dt>
+                <dd class="col-sm-9 fw-bold">@Model.Customer?.CompanyName (@Model.CustomerID)</dd>
+
+                <dt class="col-sm-3 text-muted">負責員工</dt>
+                <dd class="col-sm-9">@(Model.Employee?.FirstName + " " + Model.Employee?.LastName)</dd>
+
+                <dt class="col-sm-3 text-muted">訂單日期</dt>
+                <dd class="col-sm-9">@(Model.OrderDate?.ToString("yyyy-MM-dd") ?? "-")</dd>
+
+                <dt class="col-sm-3 text-muted">需求日期</dt>
+                <dd class="col-sm-9">@(Model.RequiredDate?.ToString("yyyy-MM-dd") ?? "-")</dd>
+
+                <dt class="col-sm-3 text-muted">收件人</dt>
+                <dd class="col-sm-9">@Model.ShipName</dd>
+
+                <dt class="col-sm-3 text-muted">收件地址</dt>
+                <dd class="col-sm-9">@Model.ShipAddress</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header fw-bold border-bottom">
+            <i class="bx bx-list-ul me-1"></i> 商品清單
+        </div>
+        <div class="table-responsive text-nowrap">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>產品名稱</th>
+                        <th class="text-end">單價</th>
+                        <th class="text-center">數量</th>
+                        <th class="text-center">折扣</th>
+                        <th class="text-end">小計</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        // 在 View 中計算總金額
+                        decimal grandTotal = 0;
+                    }
+                    @foreach (var item in Model.Order_Details)
+                    {
+                        var subtotal = (item.UnitPrice * item.Quantity) * (decimal)(1 - item.Discount);
+                        grandTotal += subtotal;
+                        <tr>
+                            <td>@item.Product.ProductName</td>
+                            <td class="text-end">@item.UnitPrice.ToString("C2")</td>
+                            <td class="text-center">@item.Quantity</td>
+                            <td class="text-center">@item.Discount.ToString("P0")</td>
+                            <td class="text-end fw-bold">@subtotal.ToString("C2")</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot class="table-border-bottom-0">
+                    <tr>
+                        <td colspan="4" class="text-end fw-bold">商品總計:</td>
+                        <td class="text-end fw-bold">@grandTotal.ToString("C2")</td>
+                    </tr>
+                    <tr>
+                        <td colspan="4" class="text-end fw-bold">運費:</td>
+                        <td class="text-end fw-bold">@(Model.Freight?.ToString("C2") ?? "$0.00")</td>
+                    </tr>
+                    <tr class="bg-label-primary">
+                        <td colspan="4" class="text-end fw-bold text-primary fs-5">訂單總額:</td>
+                        <td class="text-end fw-bold text-primary fs-5">
+                            @((grandTotal + (Model.Freight ?? 0)).ToString("C2"))
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+1-7. 實作：訂單檢視

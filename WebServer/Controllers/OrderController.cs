@@ -363,4 +363,25 @@ public class OrderController : Controller
         }
     }
     #endregion
+
+    #region 5. Details 訂單檢視
+    // GET: 顯示訂單明細
+    public async Task<IActionResult> Detail(int? id)
+    {
+        if (id == null) return NotFound();
+
+        // 透過 Include 預先載入關聯資料
+        var order = await _context.Orders
+            .Include(o => o.Customer)
+            .Include(o => o.Employee)
+            .Include(o => o.Order_Details)
+                .ThenInclude(od => od.Product) // 載入明細中的產品資訊
+            .AsNoTracking() // 唯讀頁面不需追蹤
+            .FirstOrDefaultAsync(m => m.OrderID == id);
+
+        if (order == null) return NotFound();
+
+        return View(order);
+    }
+    #endregion
 }
