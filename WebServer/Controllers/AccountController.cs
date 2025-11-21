@@ -41,10 +41,16 @@ namespace WebServer.Controllers
         // "WebServerDBContext": 這是 EF Core 的「資料庫上下文」，它是我們與資料庫溝通的唯一窗口。
         private readonly WebServerDBContext _context;
 
+        /// <summary>
+        /// 提供應用程式日誌記錄功能的介面。
+        /// </summary>
+        private readonly ILogger<AccountController> _logger;
+
+
         // 1. 透過依賴注入 (DI) 取得資料庫上下文 (DbContext)
         // 這是「建構子」(Constructor)，一個與類別同名的特殊方法。
         // 當 ASP.NET Core 要建立一個 AccountController 的「實體」(instance) 來處理請求時，會第一個呼叫它。
-        public AccountController(WebServerDBContext context)
+        public AccountController(WebServerDBContext context, ILogger<AccountController> logger)
         {
             // (WebServerDBContext context): 這裡我們「要求」 ASP.NET Core 必須提供一個 WebServerDBContext 實體。
             // 這就是「依賴注入」(Dependency Injection, DI)。
@@ -55,6 +61,8 @@ namespace WebServer.Controllers
             // 我們將系統注入的 context，存到上面宣告的私有欄位 _context 中，
             // 這樣這個類別中的其他方法（例如 Signup）才能使用它。
             _context = context;
+
+            _logger = logger;
         }
 
         // ==========================================
@@ -117,6 +125,9 @@ namespace WebServer.Controllers
                     if (user == null)
                     {
                         // 找不到使用者 -> 登入失敗
+                        // 這裡使用結構化日誌：{Account} 會被 Serilog 存為獨立欄位，方便搜尋
+                        _logger.LogWarning("使用者 {Account} 登入失敗：帳號或密碼錯誤", model.Account);
+
                         ModelState.AddModelError(nameof(model.ErrorMessage), "帳號或密碼錯誤");
                         return View(model);
                     }
@@ -124,6 +135,9 @@ namespace WebServer.Controllers
                     // 檢查帳號是否已被鎖定
                     if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.Now)
                     {
+                        // [Log] 紀錄帳號鎖定嘗試
+                        _logger.LogWarning("使用者 {Account} 嘗試登入但已被鎖定，解鎖時間：{LockoutEnd}", model.Account, user.LockoutEnd);
+
                         ModelState.AddModelError(nameof(model.ErrorMessage), "此帳號已被鎖定，請稍後再試");
                         return View(model);
                     }
@@ -131,17 +145,17 @@ namespace WebServer.Controllers
                     // 4. 登入成功：建立使用者的「身分宣告」(Claims)
                     //    Claims 就像是使用者的「身分證件」，上面記載了他的資訊
                     var claims = new List<Claim>
-                    {
+        {
                         // (a) NameIdentifier (使用者的唯一 ID)，這非常重要
-                        new Claim(ClaimTypes.NameIdentifier, user.ID.ToString()),
+            new Claim(ClaimTypes.NameIdentifier, user.ID.ToString()),
                         
                         // (b) Name (使用者的帳號)，方便我們在 View 中顯示 "歡迎, OOO"
-                        new Claim(ClaimTypes.Name, user.Account),
+            new Claim(ClaimTypes.Name, user.Account),
                         
                         // (c) 您也可以加入其他資訊，例如 Email 或角色 (Role)
                         // new Claim(ClaimTypes.Email, user.Email),
                         // new Claim(ClaimTypes.Role, "Admin"), 
-                    };
+        };
 
                     // 5. 建立身分識別 (Identity) 和主體 (Principal)
                     //    將 "證件" (Claims) 放入 "皮夾" (ClaimsIdentity)
@@ -170,6 +184,10 @@ namespace WebServer.Controllers
                         authProperties
                     );
 
+                    // [Log] 紀錄登入成功 (使用 Information 層級)
+                    // 記錄帳號 (Account) 與 資料庫ID (UserId)，這對日後追蹤使用者行為非常有幫助
+                    _logger.LogInformation("使用者 {Account} ({UserId}) 已成功登入系統", user.Account, user.ID);
+
                     // 登入成功，重設登入失敗計次
                     user.AccessFailedCount = 0;
                     _context.User.Update(user);
@@ -190,6 +208,10 @@ namespace WebServer.Controllers
                 }
                 catch (Exception ex)
                 {
+                    // [Log] 紀錄系統例外錯誤 (使用 Error 層級)
+                    // 將 exception 物件傳入，Serilog 會自動記錄堆疊追蹤 (Stack Trace)
+                    _logger.LogError(ex, "使用者 {Account} 登入時發生未預期的錯誤", model.Account);
+
                     ModelState.AddModelError(nameof(model.ErrorMessage), "發生未知的錯誤：" + ex.Message);
                     return View(model);
                 }

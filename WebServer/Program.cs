@@ -2,6 +2,7 @@
 // EF Core 是一個 ORM (物件關聯對應) 框架，讓我們可以用 C# 物件來操作資料庫。
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 using WebServer.Models.NorthwindDB;
 
 
@@ -111,6 +112,27 @@ public class Program
 
         // [新增] 註冊 UI 服務 (Scoped 即可，因為它依賴 DbContext)
         builder.Services.AddScoped<NorthwindUiService>();
+
+        #region Serilog
+        // 1. 取得系統共用資料路徑 (在 Windows 上就是 C:\ProgramData)
+        string commonDataPath = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+
+        // 2. 組合路徑： C:\ProgramData\WebServer\logs\log-.txt
+        string logPath = Path.Combine(commonDataPath, nameof(WebServer), "logs", "log-.txt");
+
+        // 3. 初始化 Serilog
+        Log.Logger = new LoggerConfiguration()
+            .WriteTo.Console()                        // 寫到主控台
+            .WriteTo.File(logPath,
+                rollingInterval: RollingInterval.Day, // 設定每天產生一個新檔案
+                retainedFileCountLimit: 7             // 設定最多只保留 7 個檔案 (超過會自動刪除最舊的)
+            )
+            .CreateLogger();
+
+        // 4. 告訴 WebHost 使用 Serilog 取代內建 Logger
+        builder.Host.UseSerilog();
+        #endregion
+
         #endregion
         // --- 服務註冊結束 ---
 
