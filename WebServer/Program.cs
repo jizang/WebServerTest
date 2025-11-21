@@ -122,6 +122,10 @@ public class Program
 
         // 3. 初始化 Serilog
         Log.Logger = new LoggerConfiguration()
+            // [建議] 將 Microsoft 內建的日誌等級調高到 Warning，這樣一般 Request 就不會寫入
+            // 這會讓 Log 變得很乾淨，只剩下你自己寫的 Log 以及系統錯誤
+            .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+            .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
             .WriteTo.Console()                        // 寫到主控台
             .WriteTo.Seq("http://localhost:3433")     // 寫入Seq
             .WriteTo.File(logPath,
