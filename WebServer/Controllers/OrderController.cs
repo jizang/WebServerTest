@@ -1,4 +1,6 @@
 ﻿using ClosedXML.Excel;
+using iTextSharp.text;
+using iTextSharp.text.pdf;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebServer.Models.NorthwindDB;
@@ -521,6 +523,159 @@ public class OrderController : Controller
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     $"Orders_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
             }
+        }
+    }
+    #endregion
+
+    #region 8. Export PDF (iTextSharp.LGPLv2.Core)
+    [HttpGet]
+    public async Task<IActionResult> ExportPdf(int id)
+    {
+        // 1. 撈取訂單資料 (包含完整關聯)
+        // 這裡沿用之前 Northwind 的資料結構 
+        var order = await _context.Orders
+            .Include(o => o.Customer)
+            .Include(o => o.Employee)
+            .Include(o => o.Order_Details).ThenInclude(od => od.Product)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(o => o.OrderID == id);
+
+        if (order == null) return NotFound();
+
+        // 2. 初始化 PDF 文件 (A4 直式, 邊距)
+        using (var ms = new MemoryStream())
+        {
+            // 設定頁面大小與邊距 (左, 右, 上, 下)
+            var document = new Document(PageSize.A4, 50, 50, 25, 25);
+            var writer = PdfWriter.GetInstance(document, ms);
+
+            document.Open();
+
+            // 3. 設定中文字型 (這是最重要的一步！)
+            // 方法 A: 直接讀取 Windows 系統字型 (僅限 Windows 環境)
+            // 方法 B: 將 .ttf 檔案複製到 wwwroot/fonts/ 下 (推薦，支援 Docker/Linux)
+
+            // 這裡示範讀取 Windows 內建的「微軟正黑體」(msjh.ttc)
+            // 如果是在 Linux/Docker，請改為 Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/fonts/msjh.ttc")
+            string fontPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "msjh.ttc,0");
+
+            // 建立基底字型 (Identity-H 是用於水平中文的編碼)
+            BaseFont bfChinese = BaseFont.CreateFont(fontPath, BaseFont.IDENTITY_H, BaseFont.NOT_EMBEDDED);
+
+            // 定義各種字體樣式
+            Font titleFont = new Font(bfChinese, 20, Font.BOLD);  // 標題大字
+            Font headerFont = new Font(bfChinese, 12, Font.BOLD); // 表頭粗體
+            Font bodyFont = new Font(bfChinese, 10, Font.NORMAL); // 內文
+
+            // 4. 加入標題 (Header)
+            var titleParagraph = new Paragraph($"訂單編號 #{order.OrderID}", titleFont);
+            titleParagraph.Alignment = Element.ALIGN_CENTER;
+            titleParagraph.SpacingAfter = 20f; // 與下方距離
+            document.Add(titleParagraph);
+
+            // 5. 加入訂單基本資訊
+            // 使用 PdfPTable 來排版基本資訊 (類似 HTML table 佈局)
+            PdfPTable infoTable = new PdfPTable(2); // 2 欄
+            infoTable.WidthPercentage = 100; // 寬度 100%
+            infoTable.SetWidths(new float[] { 1f, 1f }); // 欄位比例 1:1
+
+            // 左欄：客戶與訂單資訊
+            var infoCell1 = new PdfPCell();
+            infoCell1.Border = Rectangle.NO_BORDER;
+            infoCell1.AddElement(new Paragraph($"客戶名稱：{order.Customer?.CompanyName ?? "未知"}", bodyFont));
+            infoCell1.AddElement(new Paragraph($"訂單日期：{order.OrderDate:yyyy-MM-dd}", bodyFont));
+            infoTable.AddCell(infoCell1);
+
+            // 右欄：負責人與公司資訊
+            var infoCell2 = new PdfPCell();
+            infoCell2.Border = Rectangle.NO_BORDER;
+            infoCell2.HorizontalAlignment = Element.ALIGN_RIGHT;
+            infoCell2.AddElement(new Paragraph($"負責員工：{order.Employee?.FirstName} {order.Employee?.LastName}", bodyFont));
+            infoCell2.AddElement(new Paragraph("北風貿易有限公司", bodyFont));
+            infoTable.AddCell(infoCell2);
+
+            document.Add(infoTable);
+            document.Add(new Paragraph(" ", bodyFont)); // 空行
+
+            // 6. 加入明細表格 (Table)
+            PdfPTable table = new PdfPTable(5); // 5 欄: 產品, 單價, 數量, 折扣, 小計
+            table.WidthPercentage = 100;
+            table.SetWidths(new float[] { 4f, 1.5f, 1f, 1f, 2f }); // 設定欄位寬度比例
+            table.SpacingBefore = 10f;
+
+            // 6-1. 表格標題列
+            string[] headers = { "產品名稱", "單價", "數量", "折扣", "小計" };
+            foreach (var h in headers)
+            {
+                PdfPCell cell = new PdfPCell(new Phrase(h, headerFont));
+                cell.HorizontalAlignment = Element.ALIGN_CENTER;
+                cell.BackgroundColor = BaseColor.LightGray; // 背景色
+                cell.Padding = 5f;
+                table.AddCell(cell);
+            }
+
+            // 6-2. 表格資料列
+            decimal totalAmount = 0;
+            foreach (var item in order.Order_Details)
+            {
+                // 計算小計
+                decimal subtotal = (decimal)item.UnitPrice * item.Quantity * (decimal)(1 - item.Discount);
+                totalAmount += subtotal;
+
+                // 產品名稱 (靠左)
+                table.AddCell(new PdfPCell(new Phrase(item.Product.ProductName, bodyFont)) { Padding = 5f });
+
+                // 單價 (靠右)
+                PdfPCell cellPrice = new PdfPCell(new Phrase(item.UnitPrice.ToString("F2"), bodyFont));
+                cellPrice.HorizontalAlignment = Element.ALIGN_RIGHT;
+                cellPrice.Padding = 5f;
+                table.AddCell(cellPrice);
+
+                // 數量 (置中)
+                PdfPCell cellQty = new PdfPCell(new Phrase(item.Quantity.ToString(), bodyFont));
+                cellQty.HorizontalAlignment = Element.ALIGN_CENTER;
+                cellQty.Padding = 5f;
+                table.AddCell(cellQty);
+
+                // 折扣 (置中)
+                PdfPCell cellDisc = new PdfPCell(new Phrase(item.Discount.ToString("P0"), bodyFont));
+                cellDisc.HorizontalAlignment = Element.ALIGN_CENTER;
+                cellDisc.Padding = 5f;
+                table.AddCell(cellDisc);
+
+                // 小計 (靠右)
+                PdfPCell cellSub = new PdfPCell(new Phrase(subtotal.ToString("N2"), bodyFont));
+                cellSub.HorizontalAlignment = Element.ALIGN_RIGHT;
+                cellSub.Padding = 5f;
+                table.AddCell(cellSub);
+            }
+
+            document.Add(table);
+
+            // 7. 加入總金額 (Totals)
+            decimal freight = order.Freight ?? 0;
+            decimal grandTotal = totalAmount + freight;
+
+            PdfPTable totalTable = new PdfPTable(2);
+            totalTable.WidthPercentage = 40; // 只佔 40% 寬度
+            totalTable.HorizontalAlignment = Element.ALIGN_RIGHT; // 靠右對齊
+            totalTable.SpacingBefore = 10f;
+
+            // 運費
+            totalTable.AddCell(new PdfPCell(new Phrase("運費：", bodyFont)) { Border = Rectangle.NO_BORDER, HorizontalAlignment = Element.ALIGN_RIGHT });
+            totalTable.AddCell(new PdfPCell(new Phrase(freight.ToString("C2"), bodyFont)) { Border = Rectangle.NO_BORDER, HorizontalAlignment = Element.ALIGN_RIGHT });
+
+            // 總計 (粗體)
+            totalTable.AddCell(new PdfPCell(new Phrase("訂單總額：", headerFont)) { Border = Rectangle.NO_BORDER, HorizontalAlignment = Element.ALIGN_RIGHT });
+            totalTable.AddCell(new PdfPCell(new Phrase(grandTotal.ToString("C2"), headerFont)) { Border = Rectangle.NO_BORDER, HorizontalAlignment = Element.ALIGN_RIGHT, PaddingTop = 5f });
+
+            document.Add(totalTable);
+
+            // 8. 結束文件並回傳
+            document.Close();
+
+            // 將 MemoryStream 轉為 byte 陣列回傳
+            return File(ms.ToArray(), "application/pdf", $"Order_{id}.pdf");
         }
     }
     #endregion

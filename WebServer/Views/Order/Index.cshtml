@@ -89,6 +89,7 @@
                         // 注意：onclick 改為傳遞字串 ID，避免數字開頭為 0 的問題
                         return `
                             <div class="btn-group">
+                                <a href="/Order/ExportPdf/${data}" target="_blank" class="btn btn-sm btn-secondary text-white" title="匯出 PDF"><i class="bx bxs-file-pdf"></i> PDF</a>
                                 <a href="/Order/Detail/${data}" class="btn btn-sm btn-info text-white">檢視</a>
                                 <a href="/Order/Edit/${data}" class="btn btn-sm btn-warning text-white">編輯</a>
                                 <button type="button" onclick="deleteOrder('${data}')" class="btn btn-sm btn-danger">刪除</button>
