@@ -384,4 +384,49 @@ public class OrderController : Controller
         return View(order);
     }
     #endregion
+
+    #region 6. Delete 刪除訂單
+    // POST: 刪除訂單 (接收 AJAX 請求)
+    [HttpPost]
+    // [ValidateAntiForgeryToken] // 若前端有傳遞 Token 需開啟
+    public async Task<IActionResult> Delete(int id)
+    {
+        // 1. 開啟交易
+        using var transaction = _context.Database.BeginTransaction();
+        try
+        {
+            // 2. 查詢訂單 (包含明細)
+            var order = await _context.Orders
+                .Include(o => o.Order_Details)
+                .FirstOrDefaultAsync(o => o.OrderID == id);
+
+            if (order == null)
+            {
+                return NotFound(new { success = false, message = "找不到此訂單" });
+            }
+
+            // 3. 刪除關聯的明細 (若資料庫未設定 Cascade Delete，此步驟為必須)
+            if (order.Order_Details.Any())
+            {
+                _context.Order_Details.RemoveRange(order.Order_Details);
+            }
+
+            // 4. 刪除主檔
+            _context.Orders.Remove(order);
+
+            // 5. 儲存變更並提交交易
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new { success = true, message = "訂單已成功刪除" });
+        }
+        catch (Exception ex)
+        {
+            // 發生錯誤時回滾
+            await transaction.RollbackAsync();
+            // 記錄錯誤 (Log.Error...)
+            return StatusCode(500, new { success = false, message = "刪除失敗：" + ex.Message });
+        }
+    }
+    #endregion
 }
