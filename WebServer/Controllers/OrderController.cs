@@ -184,4 +184,80 @@ public class OrderController : Controller
     #endregion
 
     // ... (Create, Edit, Delete 等 Action 稍後實作)
+    #region 3. Create 新增訂單 (Master-Detail & Transaction)
+    // GET: 顯示新增表單
+    public IActionResult Create()
+    {
+        // 初始化 ViewModel，給定預設值 (例如訂單日期預設為今天)
+        var model = new WebServer.Models.ViewModels.OrderViewModel
+        {
+            OrderDate = DateTime.Today
+        };
+        return View(model);
+    }
+
+    // POST: 接收 JSON 資料並寫入資料庫
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] WebServer.Models.ViewModels.OrderViewModel model)
+    {
+        // 1. 驗證資料
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+            return BadRequest(new { success = false, message = "資料驗證失敗", errors = errors });
+        }
+
+        // 2. 開啟明確交易 (Explicit Transaction)
+        using var transaction = _context.Database.BeginTransaction();
+        try
+        {
+            // 3. 建立主檔 (Order)
+            var order = new Orders
+            {
+                CustomerID = model.CustomerID,
+                EmployeeID = model.EmployeeID,
+                OrderDate = model.OrderDate,
+                RequiredDate = model.RequiredDate,
+                Freight = model.Freight,
+                ShipName = model.ShipName,
+                ShipAddress = model.ShipAddress,
+                // 此時還沒有 OrderID，EF Core 會在 SaveChanges 後自動填回
+            };
+
+            _context.Orders.Add(order);
+            // 先儲存主檔以取得 OrderID
+            await _context.SaveChangesAsync();
+
+            // 4. 建立明細 (OrderDetails)
+            if (model.OrderDetails != null && model.OrderDetails.Any())
+            {
+                foreach (var item in model.OrderDetails)
+                {
+                    var detail = new Order_Details
+                    {
+                        OrderID = order.OrderID, // 使用剛剛產生的 ID
+                        ProductID = item.ProductID,
+                        UnitPrice = item.UnitPrice,
+                        Quantity = item.Quantity,
+                        Discount = item.Discount
+                    };
+                    _context.Order_Details.Add(detail);
+                }
+                // 儲存明細
+                await _context.SaveChangesAsync();
+            }
+
+            // 5. 提交交易
+            await transaction.CommitAsync();
+
+            return Ok(new { success = true, message = "訂單新增成功！", id = order.OrderID });
+        }
+        catch (Exception ex)
+        {
+            // 發生錯誤，回滾交易
+            await transaction.RollbackAsync();
+            return StatusCode(500, new { success = false, message = "儲存失敗：" + ex.Message });
+        }
+    }
+    #endregion
 }

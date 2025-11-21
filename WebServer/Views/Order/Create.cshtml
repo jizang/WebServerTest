@@ -1,0 +1,270 @@
+﻿@model WebServer.Models.ViewModels.OrderViewModel
+
+@{
+    ViewData["Title"] = "新增訂單";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="/lib/select2/css/select2.min.css" />
+    <link rel="stylesheet" href="/lib/select2-bootstrap-5-theme/select2-bootstrap-5-theme.min.css" />
+}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+    <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">訂單管理 /</span> 新增訂單</h4>
+
+    <form id="createForm">
+        <div class="card mb-4">
+            <div class="card-header bg-light fw-bold">訂單資訊</div>
+            <div class="card-body mt-3">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label asp-for="CustomerID" class="form-label"></label>
+                        <select asp-for="CustomerID" class="form-select select2-customer"></select>
+                        <span asp-validation-for="CustomerID" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label asp-for="EmployeeID" class="form-label"></label>
+                        <select asp-for="EmployeeID" class="form-select select2-employee"></select>
+                        <span asp-validation-for="EmployeeID" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="OrderDate" class="form-label"></label>
+                        <input asp-for="OrderDate" class="form-control" />
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="RequiredDate" class="form-label"></label>
+                        <input asp-for="RequiredDate" class="form-control" />
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="Freight" class="form-label"></label>
+                        <input asp-for="Freight" type="number" step="0.01" class="form-control" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label asp-for="ShipName" class="form-label"></label>
+                        <input asp-for="ShipName" class="form-control" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label asp-for="ShipAddress" class="form-label"></label>
+                        <input asp-for="ShipAddress" class="form-control" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <span class="fw-bold">訂單明細</span>
+                <button type="button" class="btn btn-sm btn-primary" id="btnAddDetail">
+                    <i class="bx bx-plus"></i> 新增商品
+                </button>
+            </div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-bordered mb-0" id="detailTable">
+                    <thead>
+                        <tr class="table-secondary text-center">
+                            <th style="width: 35%;">產品</th>
+                            <th style="width: 15%;">單價</th>
+                            <th style="width: 15%;">數量</th>
+                            <th style="width: 15%;">折扣 (0-1)</th>
+                            <th style="width: 15%;">小計</th>
+                            <th style="width: 5%;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="detailBody">
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="4" class="text-end fw-bold">總計:</td>
+                            <td class="text-end fw-bold text-danger" id="grandTotal">$0.00</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <div class="mt-4 text-end">
+            <a asp-action="Index" class="btn btn-label-secondary">取消</a>
+            <button type="submit" class="btn btn-primary">儲存訂單</button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <script src="/lib/select2/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            // 1. 初始化 Master 的 Select2
+            initSelect2('.select2-customer', '/Order/GetCustomers', '搜尋客戶...');
+            initSelect2('.select2-employee', '/Order/GetEmployees', '搜尋員工...');
+
+            // 2. 新增明細按鈕事件
+            $('#btnAddDetail').click(function () {
+                addDetailRow();
+            });
+
+            // 3. 移除明細按鈕事件 (委派事件)
+            $('#detailBody').on('click', '.btn-remove', function () {
+                $(this).closest('tr').remove();
+                updateGrandTotal();
+            });
+
+            // 4. 監聽輸入變更，即時計算小計
+            $('#detailBody').on('input', '.calc-input', function () {
+                const row = $(this).closest('tr');
+                calculateRow(row);
+                updateGrandTotal();
+            });
+
+            // 5. 表單送出 (攔截 Submit 改用 AJAX)
+            $('#createForm').submit(function (e) {
+                e.preventDefault();
+                submitOrder();
+            });
+
+            // 預設新增一列
+            addDetailRow();
+        });
+
+        // --- 共用函式 ---
+
+        // 初始化 Select2
+        function initSelect2(selector, url, placeholder) {
+            $(selector).select2({
+                theme: 'bootstrap-5',
+                ajax: {
+                    url: url,
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) {
+                        return { term: params.term, page: params.page || 1 };
+                    }
+                },
+                placeholder: placeholder,
+                allowClear: true
+            });
+        }
+
+        // 新增一列明細
+        function addDetailRow() {
+            const rowId = Date.now(); // 產生唯一 ID 避免衝突
+            const html = `
+                <tr>
+                    <td><select class="form-select select2-product" style="width:100%"></select></td>
+                    <td><input type="number" class="form-control text-end calc-input unit-price" step="0.01" readonly></td>
+                    <td><input type="number" class="form-control text-center calc-input quantity" value="1" min="1"></td>
+                    <td><input type="number" class="form-control text-center calc-input discount" value="0" step="0.05" min="0" max="1"></td>
+                    <td class="text-end fw-bold row-subtotal">$0.00</td>
+                    <td class="text-center"><button type="button" class="btn btn-sm btn-danger btn-remove"><i class="bx bx-trash"></i></button></td>
+                </tr>`;
+
+            const $row = $(html);
+            $('#detailBody').append($row);
+
+            // 初始化該列的 Product Select2
+            const $select = $row.find('.select2-product');
+            $select.select2({
+                theme: 'bootstrap-5',
+                ajax: {
+                    url: '/Order/GetProducts',
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) {
+                        return { term: params.term, page: params.page || 1 };
+                    },
+                    processResults: function (data) {
+                        // 額外處理：將價格綁定到選項資料中
+                        return {
+                            results: data.results.map(item => ({ id: item.id, text: item.text, price: item.price })),
+                            pagination: data.pagination
+                        };
+                    }
+                },
+                placeholder: '搜尋產品...',
+            });
+
+            // 當選擇產品時，自動帶入單價
+            $select.on('select2:select', function (e) {
+                const price = e.params.data.price;
+                $row.find('.unit-price').val(price);
+                calculateRow($row);
+                updateGrandTotal();
+            });
+        }
+
+        // 計算單列小計
+        function calculateRow(row) {
+            const price = parseFloat(row.find('.unit-price').val()) || 0;
+            const qty = parseInt(row.find('.quantity').val()) || 0;
+            const discount = parseFloat(row.find('.discount').val()) || 0;
+
+            // 小計 = 單價 * 數量 * (1 - 折扣)
+            const subtotal = (price * qty) * (1 - discount);
+            row.find('.row-subtotal').text('$' + subtotal.toFixed(2)).data('val', subtotal);
+        }
+
+        // 計算總計
+        function updateGrandTotal() {
+            let total = 0;
+            $('.row-subtotal').each(function () {
+                total += ($(this).data('val') || 0);
+            });
+            $('#grandTotal').text('$' + total.toFixed(2));
+        }
+
+        // 送出訂單
+        function submitOrder() {
+            // 1. 蒐集 Master 資料
+            const data = {
+                CustomerID: $('#CustomerID').val(),
+                EmployeeID: $('#EmployeeID').val(),
+                OrderDate: $('#OrderDate').val(),
+                RequiredDate: $('#RequiredDate').val(),
+                Freight: $('#Freight').val(),
+                ShipName: $('#ShipName').val(),
+                ShipAddress: $('#ShipAddress').val(),
+                OrderDetails: [] // 準備 Details 陣列
+            };
+
+            // 2. 蒐集 Details 資料
+            $('#detailBody tr').each(function () {
+                const row = $(this);
+                const pid = row.find('.select2-product').val();
+                if (pid) {
+                    data.OrderDetails.push({
+                        ProductID: parseInt(pid),
+                        UnitPrice: parseFloat(row.find('.unit-price').val()),
+                        Quantity: parseInt(row.find('.quantity').val()),
+                        Discount: parseFloat(row.find('.discount').val())
+                    });
+                }
+            });
+
+            if (data.OrderDetails.length === 0) {
+                alert("請至少新增一筆明細！");
+                return;
+            }
+
+            // 3. AJAX Post
+            fetch('/Order/Create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(res => {
+                if (res.success) {
+                    alert(res.message);
+                    window.location.href = '/Order/Index';
+                } else {
+                    alert("儲存失敗：" + (res.message || "未知錯誤"));
+                    console.error(res.errors);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert("發生系統錯誤");
+            });
+        }
+    </script>
+}
