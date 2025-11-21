@@ -123,6 +123,7 @@ public class Program
         // 3. 初始化 Serilog
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Console()                        // 寫到主控台
+            .WriteTo.Seq("http://localhost:3433")     // 寫入Seq
             .WriteTo.File(logPath,
                 rollingInterval: RollingInterval.Day, // 設定每天產生一個新檔案
                 retainedFileCountLimit: 7             // 設定最多只保留 7 個檔案 (超過會自動刪除最舊的)
