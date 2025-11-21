@@ -1,0 +1,160 @@
+﻿@{
+    ViewData["Title"] = "訂單管理";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="/lib/datatables.net-bs5/dataTables.bootstrap5.min.css" />
+}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="fw-bold py-3 mb-0">訂單列表</h4>
+        <a class="btn btn-primary" href="/Order/Create">
+            <i class="bx bx-plus me-1"></i> 新增訂單
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-datatable table-responsive">
+            <table id="orderTable" class="table table-striped table-hover border-top">
+                <thead>
+                    <tr>
+                        <th>訂單編號</th>
+                        <th>客戶</th>
+                        <th>負責員工</th>
+                        <th>訂單日期</th>
+                        <th>運費</th>
+                        <th>總金額</th>
+                        <th>功能</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="/lib/datatables.net/dataTables.min.js"></script>
+    <script src="/lib/datatables.net-bs5/dataTables.bootstrap5.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+
+            // 1. 定義欄位
+            const columns = [
+                { "data": "orderID", "title": "訂單編號", "width": "10%" },
+                { "data": "customerName", "title": "客戶", "width": "20%" },
+                { "data": "employeeName", "title": "負責員工", "width": "15%" },
+                {
+                    "data": "orderDate",
+                    "title": "訂單日期",
+                    "width": "15%",
+                    "render": function (data) {
+                        if (!data) return '';
+                        // 技巧：'en-CA' 語系剛好是 YYYY-MM-DD 格式
+                        return new Date(data).toLocaleDateString('en-CA');
+                    }
+                },
+                {
+                    "data": "freight",
+                    "title": "運費",
+                    "className": "text-end",
+                    "render": function (data) {
+                        // [Native JS] 格式化貨幣
+                        return data
+                            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data)
+                            : '$0.00';
+                    }
+                },
+                {
+                    "data": "totalAmount",
+                    "title": "總金額",
+                    "className": "text-end fw-bold",
+                    "render": function (data) {
+                        return data
+                            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data)
+                            : '$0.00';
+                    }
+                },
+                {
+                    "data": "orderID",
+                    "title": "功能",
+                    "orderable": false,
+                    "searchable": false,
+                    "render": function (data) {
+                        // 注意：onclick 改為傳遞字串 ID，避免數字開頭為 0 的問題
+                        return `
+                            <div class="btn-group">
+                                <a href="/Order/Detail/${data}" class="btn btn-sm btn-info text-white">檢視</a>
+                                <a href="/Order/Edit/${data}" class="btn btn-sm btn-warning text-white">編輯</a>
+                                <button type="button" onclick="deleteOrder('${data}')" class="btn btn-sm btn-danger">刪除</button>
+                            </div>
+                        `;
+                    }
+                }
+            ];
+
+            // 2. 初始化 DataTable (使用現代 new 語法)
+            // 注意：這裡我們將 table 實體存為全域變數或可存取變數，以便 reload 使用
+            const table = new DataTable('#orderTable', {
+                dom: "<'row row-filter m-2'f><'row row-length m-2'l>rt<'row row-info m-2 d-flex justify-content-between'ip>",
+                autoWidth: false,
+                processing: true,
+                serverSide: true,
+                order: [[0, "desc"]],
+                ajax: {
+                    url: "/Order/GetOrders",
+                    type: "POST"
+                },
+                columns: columns,
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/2.3.4/i18n/zh-HANT.json"
+                },
+                drawCallback: function () {
+                    // 原生 JS 取得 API 回傳資料的方式
+                    const api = this.api();
+                    const json = api.ajax.json();
+                    if (json && json.error) {
+                        alert("載入失敗: " + json.error);
+                    }
+                }
+            });
+
+            // 將 table 實體掛載到 window 物件，讓 deleteOrder 函數可以存取 (如果需要 reload)
+            window.orderTableInstance = table;
+        });
+
+        // 3. [Native JS] 刪除功能 (使用 fetch + confirm)
+        async function deleteOrder(id) {
+            // 使用原生 confirm 取代 SweetAlert
+            if (!confirm("確定要刪除嗎？刪除後將無法復原此訂單！")) {
+                return;
+            }
+
+            try {
+                // 使用原生 fetch 取代 $.ajax
+                const response = await fetch(`/Order/Delete/${id}`, {
+                    method: 'POST',
+                    headers: {
+                        // 若後端需要 Anti-Forgery Token，需在此加入
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    alert('訂單已成功刪除。');
+                    // 重新載入 DataTable (不刷新頁面)
+                    if (window.orderTableInstance) {
+                        window.orderTableInstance.ajax.reload(null, false);
+                    }
+                } else {
+                    alert('刪除失敗，伺服器回應錯誤。');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('發生錯誤，請稍後再試。');
+            }
+        }
+    </script>
+}
