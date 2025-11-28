@@ -13,11 +13,36 @@ public partial class WebServerDBContext : DbContext
     {
     }
 
+    public virtual DbSet<ExchangeReportStockDayAll> ExchangeReportStockDayAll { get; set; }
+
     public virtual DbSet<User> User { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.UseCollation("Chinese_Taiwan_Stroke_CI_AS");
+
+        modelBuilder.Entity<ExchangeReportStockDayAll>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__Exchange__3214EC074DC7BC60");
+
+            entity.HasIndex(e => new { e.Code, e.TradeDate }, "IX_ExchangeReportStockDayAll_Code_TradeDate");
+
+            entity.HasIndex(e => new { e.TradeDate, e.Code }, "IX_ExchangeReportStockDayAll_TradeDate_Code");
+
+            entity.Property(e => e.Change).HasColumnType("decimal(10, 4)");
+            entity.Property(e => e.ClosingPrice).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.Code)
+                .HasMaxLength(10)
+                .IsUnicode(false);
+            entity.Property(e => e.HighestPrice).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.LowestPrice).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.Name).HasMaxLength(50);
+            entity.Property(e => e.OpeningPrice).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.TradeDate)
+                .HasMaxLength(7)
+                .IsUnicode(false)
+                .IsFixedLength();
+        });
 
         modelBuilder.Entity<User>(entity =>
         {
