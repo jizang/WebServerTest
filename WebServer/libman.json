@@ -21,6 +21,10 @@
     {
       "library": "select2-bootstrap-5-theme@1.3.0",
       "destination": "wwwroot/lib/select2-bootstrap-5-theme/"
+    },
+    {
+      "library": "Chart.js@4.5.0",
+      "destination": "wwwroot/lib/Chart.js/"
     }
   ]
 }
