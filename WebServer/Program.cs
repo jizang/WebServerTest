@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using WebServer.Models.NorthwindDB;
+using Quartz;
+using WebServer.Jobs;
 
 
 // 引入我們使用 EF Core Power Tools 從資料庫產生的 Model 和 DbContext 所在的命名空間。
@@ -136,6 +138,33 @@ public class Program
 
         // 4. 告訴 WebHost 使用 Serilog 取代內建 Logger
         builder.Host.UseSerilog();
+        #endregion
+
+        // 註冊 IHttpClientFactory
+        builder.Services.AddHttpClient();
+
+        #region Quartz 排程服務註冊
+        // 2. 註冊 Quartz
+        builder.Services.AddQuartz(q =>
+        {
+            // 建立 JobKey
+            var jobKey = new JobKey(nameof(FetchExchangeReportStockDayAllJob));
+
+            // 註冊 Job
+            q.AddJob<FetchExchangeReportStockDayAllJob>(opts => opts.WithIdentity(jobKey));
+
+            // 設定 Trigger (觸發器)
+            q.AddTrigger(opts => opts
+                .ForJob(jobKey)
+                .WithIdentity($"{nameof(FetchExchangeReportStockDayAllJob)}-trigger")
+                // 設定執行時間：每天下午 8:30
+                // Cron 表達式: 秒 分 時 日 月 週
+                .WithCronSchedule("0 30 20 * * ?"));
+        });
+
+        // 3. 啟動 Quartz Hosted Service
+        // 這裡設定 WaitForJobsToComplete = true 確保應用程式關閉時會等待 Job 完成
+        builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
         #endregion
 
         #endregion
