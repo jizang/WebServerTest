@@ -1,0 +1,180 @@
+﻿@{
+    ViewData["Title"] = "股市行情看板";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="/lib/datatables.net-bs5/dataTables.bootstrap5.min.css" />
+    <style>
+        /* 台灣股市顏色慣例：紅漲綠跌 */
+        .stock-up { color: #e11d48; font-weight: bold; }
+        .stock-down { color: #22c55e; font-weight: bold; }
+        .stock-flat { color: #64748b; }
+    </style>
+}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="fw-bold py-3 mb-0">
+            <span class="text-muted fw-light">金融市場 /</span> 股市行情
+        </h4>
+        <button type="button" class="btn btn-outline-primary">
+            <i class="bx bx-refresh me-1"></i> 重新整理
+        </button>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6 col-lg-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title m-0 me-2">🔥 熱門成交量 Top 10</h5>
+                    <small class="text-muted" id="chartDateLabel">載入中...</small>
+                </div>
+                <div class="card-body">
+                    <canvas id="volumeChart" style="max-height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title m-0 me-2">🚀 強勢股 (漲價差) Top 10</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="changeChart" style="max-height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h5 class="card-header">每日收盤行情列表</h5>
+        <div class="card-datatable table-responsive">
+            <table id="stockTable" class="table table-hover border-top">
+                <thead>
+                    <tr>
+                        <th>交易日期</th>
+                        <th>代號</th>
+                        <th>證券名稱</th>
+                        <th>成交股數</th>
+                        <th>成交金額</th>
+                        <th>開盤價</th>
+                        <th>收盤價</th>
+                        <th>漲跌</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="/lib/datatables.net/dataTables.min.js"></script>
+    <script src="/lib/datatables.net-bs5/dataTables.bootstrap5.min.js"></script>
+    <script src="/lib/Chart.js/chart.umd.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+
+            // --- 1. 初始化 DataTables ---
+            const table = new DataTable('#stockTable', {
+                dom: "<'row row-filter m-2'f><'row row-length m-2'l>rt<'row row-info m-2 d-flex justify-content-between'ip>",
+                processing: true,
+                serverSide: true, // 開啟伺服器端分頁
+                order: [[0, "desc"], [1, "asc"]], // 預設依日期降序，代號升序
+                ajax: {
+                    url: "/Stock/GetStocks",
+                    type: "POST"
+                },
+                columns: [
+                    { "data": "tradeDate", "title": "日期", "width": "10%" },
+                    {
+                        "data": "code", "title": "代號", "width": "10%",
+                        "render": function(data) {
+                            return `<span class="badge bg-label-primary">${data}</span>`;
+                        }
+                    },
+                    { "data": "name", "title": "名稱", "width": "15%" },
+                    {
+                        "data": "tradeVolume", "title": "成交股數", "className": "text-end",
+                        "render": function(data) {
+                            return new Intl.NumberFormat().format(data);
+                        }
+                    },
+                    {
+                        "data": "tradeValue", "title": "成交金額", "className": "text-end",
+                        "visible": false // 預設隱藏，避免欄位太多
+                    },
+                    { "data": "openingPrice", "title": "開盤", "className": "text-end" },
+                    { "data": "closingPrice", "title": "收盤", "className": "text-end" },
+                    {
+                        "data": "change", "title": "漲跌", "className": "text-end",
+                        "render": function(data) {
+                            if (data > 0) return `<span class="stock-up">▲ ${data}</span>`;
+                            if (data < 0) return `<span class="stock-down">▼ ${data}</span>`;
+                            return `<span class="stock-flat">-</span>`;
+                        }
+                    }
+                ],
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/2.3.4/i18n/zh-HANT.json"
+                }
+            });
+
+            // --- 2. 初始化圖表 (Chart.js) ---
+            fetch('/Stock/GetStockStatistics')
+                .then(response => response.json())
+                .then(res => {
+                    // 更新日期標籤
+                    if(res.date) document.getElementById('chartDateLabel').innerText = `資料日期: ${res.date}`;
+
+                    // A. 繪製成交量圖表 (Bar Chart)
+                    const ctxVolume = document.getElementById('volumeChart').getContext('2d');
+                    new Chart(ctxVolume, {
+                        type: 'bar',
+                        data: {
+                            labels: res.topVolume.map(x => x.label),
+                            datasets: [{
+                                label: '成交股數',
+                                data: res.topVolume.map(x => x.value),
+                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: { beginAtZero: true }
+                            }
+                        }
+                    });
+
+                    // B. 繪製漲幅圖表 (Bar Chart - Horizontal 建議)
+                    const ctxChange = document.getElementById('changeChart').getContext('2d');
+                    new Chart(ctxChange, {
+                        type: 'bar',
+                        data: {
+                            labels: res.topChange.map(x => x.label),
+                            datasets: [{
+                                label: '漲跌價差',
+                                data: res.topChange.map(x => x.value),
+                                backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y', // 轉為橫向長條圖
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                })
+                .catch(err => console.error("圖表載入失敗", err));
+        });
+    </script>
+}
