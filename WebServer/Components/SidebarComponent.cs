@@ -77,7 +77,24 @@ public class SidebarComponent : ViewComponent
                     }
                 },
 
-                // 4. 個人設定 (User Settings)
+                // 4. 金融數據 (Financial Data)
+                new MenuItem
+                {
+                    Title = "金融數據",
+                    URL = "javascript:void(0);",
+                    Icon = "menu-icon tf-icons bx bx-bar-chart-alt-2", // 使用圖表圖示
+                    SubItems = new List<MenuItem>
+                    {
+                        new MenuItem {
+                            Title = "股市行情",
+                            Controller = "Stock",
+                            Action = "Index",
+                            URL = "/Stock/Index",
+                        }
+                    }
+                },
+
+                // 5. 個人設定 (User Settings)
                 new MenuItem
                 {
                     Title = "個人設定",
